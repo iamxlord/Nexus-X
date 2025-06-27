@@ -2,36 +2,37 @@
 set -e
 
 # === Basic Configuration ===
-# Base name for Docker containers to be created
+
 BASE_CONTAINER_NAME="nexus-node"
-# Name and tag for the Docker image that will be built
 IMAGE_NAME="nexus-node:latest"
-# Directory to store Nexus node logs on the host machine
 LOG_DIR="/root/nexus_logs"
 
-# === Terminal Colors ===
-# ANSI escape codes for colored output in the terminal
+# === Colors and Styling ===
+BOLD='\033[1m'
+HGREEN='\033[1;32m'
 GREEN='\033[0;32m'
 RED='\033[0;31m'
-YELLOW='\033[1;33m'
-CYAN='\033[0;36m'
-RESET='\033[0m' # Resets color to default
+YELLOW='\033[0;33m'
+RESET='\033[0m'
 
-# ---
-
-### Core Functions
-
-## show_header
-# Displays a clear header for the script's interface.
 function show_header() {
     clear # Clears the terminal screen
-    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo -e "           NEXUS - Airdrop Node"
-    echo -e "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}"
+    echo ""
+    echo -e "${BOLD}${HGREEN}"
+    echo "███╗   ███╗██████╗        ██╗  ██╗"
+    echo "████╗ ████║██╔══██╗       ╚██╗██╔╝"
+    echo "██╔████╔██║██████╔╝        ╚███╔╝ "
+    echo "██║╚██╔╝██║██╔══██╗        ██╔██╗ "
+    echo "██║ ╚═╝ ██║██║  ██║██╗    ██╔╝ ██╗"
+    echo "╚═╝     ╚═╝╚═╝  ╚═╝╚═╝    ╚═╝  ╚═╝"
+
+    echo "                 Github: http://github.com/iamxlord"
+    echo -e "                 Twitter: http://x.com/iamxlord${RESET}"
+    echo ""
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}"
 }
 
-## check_docker
-# Checks if Docker is installed and installs it if not.
 function check_docker() {
     if ! command -v docker >/dev/null 2>&1; then
         echo -e "${YELLOW}Docker not found. Installing Docker...${RESET}"
@@ -54,8 +55,6 @@ function check_docker() {
     fi
 }
 
-## check_cron
-# Checks if Cron is installed and installs it if not.
 function check_cron() {
     if ! command -v cron >/dev/null 2>&1; then
         echo -e "${YELLOW}Cron not found. Installing cron...${RESET}"
@@ -67,8 +66,6 @@ function check_cron() {
     fi
 }
 
-## build_image
-# Builds the Docker image for the Nexus node.
 function build_image() {
     echo -e "${YELLOW}Building Docker image for Nexus node...${RESET}"
     # Create a temporary directory for Dockerfile and entrypoint script
@@ -92,16 +89,12 @@ RUN apt-get update && apt-get install -y \\
 RUN curl -sSL https://cli.nexus.xyz/ | NONINTERACTIVE=1 sh \\
     && ln -sf /root/.nexus/bin/nexus-network /usr/local/bin/nexus-network
 
-# Copy the entrypoint script into the Docker image
-COPY entrypoint.sh /entrypoint.sh
-# Make the entrypoint script executable
-RUN chmod +x /entrypoint.sh
 
-# Set the entrypoint for the Docker container
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
 ENTRYPOINT ["/entrypoint.sh"]
 EOF
 
-    # Create entrypoint.sh script
     cat > entrypoint.sh <<EOF
 #!/bin/bash
 set -e
@@ -111,7 +104,7 @@ if [ -z "\$NODE_ID" ]; then
     exit 1
 fi
 echo "\$NODE_ID" > "\$PROVER_ID_FILE"
-# Kill any existing 'screen' session named 'nexus' gracefully
+
 screen -S nexus -X quit >/dev/null 2>&1 || true
 # Start the nexus-network command in a detached screen session
 screen -dmS nexus bash -c "nexus-network start --node-id \$NODE_ID &>> /root/nexus.log"
@@ -146,10 +139,10 @@ function run_container() {
     # Remove any existing container with the same name (forcefully)
     docker rm -f "$container_name" 2>/dev/null || true
     # Create the log directory if it doesn't exist
-    mkdir -p "$LOG_DIR"
+    sudo mkdir -p "$LOG_DIR"
     # Create an empty log file and set permissions
-    touch "$log_file"
-    chmod 644 "$log_file"
+    sudo touch "$log_file"
+    sudo chmod 644 "$log_file"
 
     # Run the Docker container in detached mode
     # -d: Run in detached mode
@@ -166,8 +159,6 @@ function run_container() {
     echo -e "${GREEN}Nexus node '${node_id}' started in container '${container_name}'. Logs at ${log_file}${RESET}"
 }
 
-## uninstall_node
-# Removes a specific Nexus node container and its associated files.
 function uninstall_node() {
     local node_id=$1
     local cname="${BASE_CONTAINER_NAME}-${node_id}"
@@ -179,13 +170,11 @@ function uninstall_node() {
     echo -e "${GREEN}Node '${node_id}' has been uninstalled.${RESET}"
 }
 
-## get_all_nodes
 # Retrieves a list of all active Nexus node IDs by inspecting Docker container names.
 function get_all_nodes() {
     docker ps -a --format "{{.Names}}" | grep "^${BASE_CONTAINER_NAME}-" | sed "s/${BASE_CONTAINER_NAME}-//"
 }
 
-## list_nodes
 # Displays a formatted list of all running Nexus nodes with their status, CPU, and memory usage.
 function list_nodes() {
     show_header
@@ -228,8 +217,7 @@ function list_nodes() {
     read -p "Press Enter to return to the menu..."
 }
 
-## view_logs
-# Allows the user to select a node and view its real-time logs.
+
 function view_logs() {
     local all_nodes=($(get_all_nodes))
     if [ ${#all_nodes[@]} -eq 0 ]; then
@@ -255,8 +243,6 @@ function view_logs() {
     read -p "Press Enter to return to the menu..."
 }
 
-## batch_uninstall_nodes
-# Allows the user to select and uninstall multiple nodes at once.
 function batch_uninstall_nodes() {
     local all_nodes=($(get_all_nodes))
     if [ ${#all_nodes[@]} -eq 0 ]; then
@@ -280,8 +266,6 @@ function batch_uninstall_nodes() {
     read -p "Press Enter to return to the menu..."
 }
 
-## uninstall_all_nodes
-# Prompts the user to confirm and then uninstalls all Nexus node containers.
 function uninstall_all_nodes() {
     local all_nodes=($(get_all_nodes))
     if [ ${#all_nodes[@]} -eq 0 ]; then
@@ -303,13 +287,11 @@ function uninstall_all_nodes() {
     read -p "Press Enter to return to the menu..."
 }
 
-# ---
-
-### Main Menu
-
-# Infinite loop to display the main menu until the user chooses to exit.
 while true; do
     show_header
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo -e "           NEXUS - 'stable' X
+    echo -e "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}"
     echo -e "${GREEN} 1.${RESET} ➕ Install & Run Node"
     echo -e "${GREEN} 2.${RESET} 📊 View All Node Status"
     echo -e "${GREEN} 3.${RESET} ❌ Uninstall Specific Node(s)"
