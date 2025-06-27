@@ -12,8 +12,8 @@ BOLD='\033[1m'
 HGREEN='\033[1;32m'
 GREEN='\033[0;32m'
 RED='\033[0;31m'
-YELLOW='\033[0;33m'
 CYAN='\033[0;36m'
+YELLOW='\033[0;33m'
 RESET='\033[0m'
 
 function show_header() {
@@ -291,7 +291,7 @@ function uninstall_all_nodes() {
 while true; do
     show_header
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo -e "           NEXUS - 'stable' X
+    echo -e "                   NEXUS - 'stable' X"
     echo -e "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}"
     echo -e "${GREEN} 1.${RESET} ➕ Install & Run Node"
     echo -e "${GREEN} 2.${RESET} 📊 View All Node Status"
