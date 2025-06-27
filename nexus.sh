@@ -291,7 +291,7 @@ function uninstall_all_nodes() {
 while true; do
     show_header
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo -e "                   NEXUS - 'stable' X"
+    echo -e "        NEXUS - 'stable' X"
     echo -e "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}"
     echo -e "${GREEN} 1.${RESET} ➕ Install & Run Node"
     echo -e "${GREEN} 2.${RESET} 📊 View All Node Status"
