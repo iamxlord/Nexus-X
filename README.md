@@ -133,7 +133,7 @@ chmod +x nexus.sh
 ```
 * Run the script! 
 ```bash
-./nexus.sh
+sudo ./nexus.sh
 ```
 follow the ON-screen prompts
 
