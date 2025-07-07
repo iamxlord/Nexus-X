@@ -40,7 +40,7 @@ function check_docker() {
         sudo apt update
         sudo apt install -y apt-transport-https ca-certificates curl software-properties-common
         curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
-        sudo add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable"
+        sudo add-apt-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable"
         sudo apt update
         sudo apt install -y docker-ce
         sudo systemctl enable docker
@@ -193,7 +193,7 @@ function view_logs() {
         echo -e "${YELLOW}No Nexus nodes found to view logs for.${RESET}"
         read -p "Press Enter to return to the menu..."
         return
-    }
+    fi # <--- Corrected from '}'
 
     echo -e "${CYAN}Select a node to view logs:${RESET}"
     for i in "${!all_nodes[@]}"; do
@@ -217,7 +217,7 @@ function batch_uninstall_nodes() {
         echo -e "${YELLOW}No Nexus nodes found to uninstall.${RESET}"
         read -p "Press Enter to return to the menu..."
         return
-    }
+    fi # <--- Corrected from '}'
 
     echo -e "${CYAN}Enter the numbers of the nodes you want to uninstall (separate with spaces):${RESET}"
     for i in "${!all_nodes[@]}"; do
@@ -240,7 +240,7 @@ function uninstall_all_nodes() {
         echo -e "${YELLOW}No Nexus nodes found to uninstall.${RESET}"
         read -p "Press Enter to return to the menu..."
         return
-    }
+    fi # <--- Corrected from '}'
 
     echo -e "${RED}Are you sure you want to uninstall ALL Nexus nodes? (y/n)${RESET}"
     read -rp "Confirm: " confirm
@@ -261,7 +261,7 @@ function monitor_and_restart_nodes() {
     if [ ${#all_nodes[@]} -eq 0 ]; then
         echo "$(date): No Nexus nodes found to monitor."
         return
-    }
+    fi # <--- Corrected from '}'
 
     for node_id in "${all_nodes[@]}"; do
         local container_name="${BASE_CONTAINER_NAME}-${node_id}"
@@ -275,8 +275,8 @@ function monitor_and_restart_nodes() {
                     echo "$(date): Node ${node_id} restarted successfully."
                 else
                     echo "$(date): Failed to restart node ${node_id}. Deleting and re-running..."
-                    uninstall_node "$node_id" 
-                    run_container "$node_id" 
+                    uninstall_node "$node_id"
+                    run_container "$node_id"
                     echo "$(date): Node ${node_id} re-provisioned successfully."
                 fi
             fi
@@ -284,7 +284,7 @@ function monitor_and_restart_nodes() {
             echo "$(date): Node ${node_id} container '${container_name}' does not exist. Removing lingering cron/log entries."
             rm -f "${LOG_DIR}/nexus-${node_id}.log"
             sudo rm -f "/etc/cron.d/nexus-log-cleanup-${node_id}"
-            sudo rm -f "/etc/cron.d/nexus-monitor-${node_id}" 
+            sudo rm -f "/etc/cron.d/nexus-monitor-${node_id}"
         fi
     done
     echo "$(date): Node health check complete."
