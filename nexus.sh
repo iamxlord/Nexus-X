@@ -2,10 +2,10 @@
 set -e
 
 # === Basic Configuration ===
-
 BASE_CONTAINER_NAME="nexus-node"
 IMAGE_NAME="nexus-node:latest"
-LOG_DIR="/root/nexus_logs"
+LOG_DIR="${HOME}/nexus_logs"
+SCRIPT_DIR_MAIN_CALL="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 
 # === Colors and Styling ===
 BOLD='\033[1m'
@@ -17,7 +17,7 @@ YELLOW='\033[0;33m'
 RESET='\033[0m'
 
 function show_header() {
-    clear # Clears the terminal screen
+    clear
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}"
     echo ""
     echo -e "${BOLD}${HGREEN}"
@@ -37,19 +37,12 @@ function show_header() {
 function check_docker() {
     if ! command -v docker >/dev/null 2>&1; then
         echo -e "${YELLOW}Docker not found. Installing Docker...${RESET}"
-        # Update package lists
         sudo apt update
-        # Install necessary packages for Docker
         sudo apt install -y apt-transport-https ca-certificates curl software-properties-common
-        # Add Docker's official GPG key
         curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
-        # Add Docker APT repository
         sudo add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable"
-        # Update package lists again after adding repo
         sudo apt update
-        # Install Docker CE (Community Edition)
         sudo apt install -y docker-ce
-        # Enable and start the Docker service
         sudo systemctl enable docker
         sudo systemctl start docker
         echo -e "${GREEN}Docker installed and started.${RESET}"
@@ -69,11 +62,9 @@ function check_cron() {
 
 function build_image() {
     echo -e "${YELLOW}Building Docker image for Nexus node...${RESET}"
-    # Create a temporary directory for Dockerfile and entrypoint script
     WORKDIR=$(mktemp -d)
     cd "$WORKDIR"
 
-    # Create Dockerfile
     cat > Dockerfile <<EOF
 FROM ubuntu:24.04
 
@@ -86,13 +77,12 @@ RUN apt-get update && apt-get install -y \\
     bash \\
     && rm -rf /var/lib/apt/lists/*
 
-# Download and install Nexus CLI, then create a symlink for easy access
 RUN curl -sSL https://cli.nexus.xyz/ | NONINTERACTIVE=1 sh \\
     && ln -sf /root/.nexus/bin/nexus-network /usr/local/bin/nexus-network
 
-
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
+
 ENTRYPOINT ["/entrypoint.sh"]
 EOF
 
@@ -105,11 +95,9 @@ if [ -z "\$NODE_ID" ]; then
     exit 1
 fi
 echo "\$NODE_ID" > "\$PROVER_ID_FILE"
-
 screen -S nexus -X quit >/dev/null 2>&1 || true
-# Start the nexus-network command in a detached screen session
 screen -dmS nexus bash -c "nexus-network start --node-id \$NODE_ID &>> /root/nexus.log"
-sleep 3 # Give a moment for the screen session to start
+sleep 3
 if screen -list | grep -q "nexus"; then
     echo "Node is running in the background."
 else
@@ -117,19 +105,15 @@ else
     cat /root/nexus.log
     exit 1
 fi
-# Keep the container running by tailing the log file
 tail -f /root/nexus.log
 EOF
 
-    # Build the Docker image
-    docker build -t "$IMAGE_NAME" .
-    cd - # Go back to the previous directory
-    rm -rf "$WORKDIR" # Clean up the temporary directory
+    sudo docker build -t "$IMAGE_NAME" .
+    cd -
+    rm -rf "$WORKDIR"
     echo -e "${GREEN}Docker image '${IMAGE_NAME}' built successfully.${RESET}"
 }
 
-## run_container
-# Runs a Docker container for a Nexus node with a given NODE_ID.
 function run_container() {
     local node_id=$1
     local container_name="${BASE_CONTAINER_NAME}-${node_id}"
@@ -137,25 +121,14 @@ function run_container() {
 
     echo -e "${YELLOW}Starting Nexus node with ID: ${node_id}...${RESET}"
 
-    # Remove any existing container with the same name (forcefully)
-    docker rm -f "$container_name" 2>/dev/null || true
-    # Create the log directory if it doesn't exist
-    sudo mkdir -p "$LOG_DIR"
-    # Create an empty log file and set permissions
-    sudo touch "$log_file"
-    sudo chmod 644 "$log_file"
+    sudo docker rm -f "$container_name" 2>/dev/null || true
+    mkdir -p "$LOG_DIR"
+    touch "$log_file"
+    chmod 644 "$log_file"
 
-    # Run the Docker container in detached mode
-    # -d: Run in detached mode
-    # --name: Assign a name to the container
-    # -v: Mount the host log file into the container
-    # -e: Pass NODE_ID as an environment variable to the container
-    docker run -d --name "$container_name" -v "$log_file":/root/nexus.log -e NODE_ID="$node_id" "$IMAGE_NAME"
+    sudo docker run -d --name "$container_name" -v "$log_file":/root/nexus.log -e NODE_ID="$node_id" "$IMAGE_NAME"
 
-    check_cron # Ensure cron is installed for log cleanup
-
-    # Schedule a cron job to clean up the specific node's log file daily at midnight.
-    # This prevents log files from growing indefinitely.
+    check_cron
     echo "0 0 * * * rm -f $log_file" | sudo tee "/etc/cron.d/nexus-log-cleanup-${node_id}" > /dev/null
     echo -e "${GREEN}Nexus node '${node_id}' started in container '${container_name}'. Logs at ${log_file}${RESET}"
 }
@@ -164,19 +137,16 @@ function uninstall_node() {
     local node_id=$1
     local cname="${BASE_CONTAINER_NAME}-${node_id}"
     echo -e "${YELLOW}Attempting to stop and remove node '${node_id}'...${RESET}"
-    # Stop and remove the Docker container
-    docker rm -f "$cname" 2>/dev/null || true
-    # Remove the associated log file and cron job
-    sudo rm -f "${LOG_DIR}/nexus-${node_id}.log" "/etc/cron.d/nexus-log-cleanup-${node_id}"
+    sudo docker rm -f "$cname" 2>/dev/null || true
+    rm -f "${LOG_DIR}/nexus-${node_id}.log"
+    sudo rm -f "/etc/cron.d/nexus-log-cleanup-${node_id}"
     echo -e "${GREEN}Node '${node_id}' has been uninstalled.${RESET}"
 }
 
-# Retrieves a list of all active Nexus node IDs by inspecting Docker container names.
 function get_all_nodes() {
-    docker ps -a --format "{{.Names}}" | grep "^${BASE_CONTAINER_NAME}-" | sed "s/${BASE_CONTAINER_NAME}-//"
+    sudo docker ps -a --format "{{.Names}}" | grep "^${BASE_CONTAINER_NAME}-" | sed "s/${BASE_CONTAINER_NAME}-//"
 }
 
-# Displays a formatted list of all running Nexus nodes with their status, CPU, and memory usage.
 function list_nodes() {
     show_header
     echo -e "${CYAN}📊 Registered Node List:${RESET}"
@@ -194,11 +164,10 @@ function list_nodes() {
             local cpu="N/A"
             local mem="N/A"
             local status="Inactive" # Default status
-            if docker inspect "$container" &>/dev/null; then
-                status=$(docker inspect -f '{{.State.Status}}' "$container" 2>/dev/null)
+            if sudo docker inspect "$container" &>/dev/null; then
+                status=$(sudo docker inspect -f '{{.State.Status}}' "$container" 2>/dev/null)
                 if [[ "$status" == "running" ]]; then
-                    # Get CPU and Memory usage from docker stats
-                    stats=$(docker stats --no-stream --format "{{.CPUPerc}}|{{.MemUsage}}" "$container" 2>/dev/null)
+                    stats=$(sudo docker stats --no-stream --format "{{.CPUPerc}}|{{.MemUsage}}" "$container" 2>/dev/null)
                     cpu=$(echo "$stats" | cut -d'|' -f1)
                     mem=$(echo "$stats" | cut -d'|' -f2 | cut -d'/' -f1 | xargs)
                 elif [[ "$status" == "exited" ]]; then
@@ -218,14 +187,13 @@ function list_nodes() {
     read -p "Press Enter to return to the menu..."
 }
 
-
 function view_logs() {
     local all_nodes=($(get_all_nodes))
     if [ ${#all_nodes[@]} -eq 0 ]; then
         echo -e "${YELLOW}No Nexus nodes found to view logs for.${RESET}"
         read -p "Press Enter to return to the menu..."
         return
-    fi
+    }
 
     echo -e "${CYAN}Select a node to view logs:${RESET}"
     for i in "${!all_nodes[@]}"; do
@@ -236,8 +204,7 @@ function view_logs() {
     if [[ "$choice" =~ ^[0-9]+$ ]] && (( choice > 0 && choice <= ${#all_nodes[@]} )); then
         local selected=${all_nodes[$((choice-1))]}
         echo -e "${YELLOW}Displaying logs for node: ${selected}${RESET}"
-        # Stream logs in real-time
-        docker logs -f "${BASE_CONTAINER_NAME}-${selected}"
+        sudo docker logs -f "${BASE_CONTAINER_NAME}-${selected}"
     else
         echo -e "${RED}Invalid choice. Please enter a valid number.${RESET}"
     fi
@@ -250,7 +217,7 @@ function batch_uninstall_nodes() {
         echo -e "${YELLOW}No Nexus nodes found to uninstall.${RESET}"
         read -p "Press Enter to return to the menu..."
         return
-    fi
+    }
 
     echo -e "${CYAN}Enter the numbers of the nodes you want to uninstall (separate with spaces):${RESET}"
     for i in "${!all_nodes[@]}"; do
@@ -273,7 +240,7 @@ function uninstall_all_nodes() {
         echo -e "${YELLOW}No Nexus nodes found to uninstall.${RESET}"
         read -p "Press Enter to return to the menu..."
         return
-    fi
+    }
 
     echo -e "${RED}Are you sure you want to uninstall ALL Nexus nodes? (y/n)${RESET}"
     read -rp "Confirm: " confirm
@@ -287,6 +254,72 @@ function uninstall_all_nodes() {
     fi
     read -p "Press Enter to return to the menu..."
 }
+
+function monitor_and_restart_nodes() {
+    echo "$(date): Running node health check..."
+    local all_nodes=($(get_all_nodes))
+    if [ ${#all_nodes[@]} -eq 0 ]; then
+        echo "$(date): No Nexus nodes found to monitor."
+        return
+    }
+
+    for node_id in "${all_nodes[@]}"; do
+        local container_name="${BASE_CONTAINER_NAME}-${node_id}"
+        if sudo docker inspect "$container_name" &>/dev/null; then
+            local status=$(sudo docker inspect -f '{{.State.Status}}' "$container_name" 2>/dev/null)
+            if [[ "$status" == "running" ]]; then
+                echo "$(date): Node ${node_id} is running (Status: ${status})."
+            else
+                echo "$(date): Node ${node_id} is NOT running (Status: ${status}). Attempting restart..."
+                if sudo docker start "$container_name" &>/dev/null; then
+                    echo "$(date): Node ${node_id} restarted successfully."
+                else
+                    echo "$(date): Failed to restart node ${node_id}. Deleting and re-running..."
+                    uninstall_node "$node_id" 
+                    run_container "$node_id" 
+                    echo "$(date): Node ${node_id} re-provisioned successfully."
+                fi
+            fi
+        else
+            echo "$(date): Node ${node_id} container '${container_name}' does not exist. Removing lingering cron/log entries."
+            rm -f "${LOG_DIR}/nexus-${node_id}.log"
+            sudo rm -f "/etc/cron.d/nexus-log-cleanup-${node_id}"
+            sudo rm -f "/etc/cron.d/nexus-monitor-${node_id}" 
+        fi
+    done
+    echo "$(date): Node health check complete."
+}
+
+function setup_monitor_cron() {
+    check_cron
+
+    local MONITOR_SCRIPT_PATH="${SCRIPT_DIR_MAIN_CALL}/nexus_monitor.sh"
+    local CRON_FILE="/etc/cron.d/nexus-monitor-global"
+
+    local EXPECTED_CRON_ENTRY="*/5 * * * * ${USER} ${MONITOR_SCRIPT_PATH}"
+    if [ ! -f "$CRON_FILE" ] || ! sudo grep -qxF "${EXPECTED_CRON_ENTRY}" "$CRON_FILE"; then
+        echo -e "${YELLOW}Setting up global Nexus node monitoring via cron...${RESET}"
+
+        cat > "$MONITOR_SCRIPT_PATH" <<EOF
+#!/bin/bash
+
+export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+SCRIPT_DIR_MONITOR="\$( cd "\$( dirname "\${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
+source "\$SCRIPT_DIR_MONITOR/nexus.sh" # Source the main script
+
+monitor_and_restart_nodes >> "${LOG_DIR}/nexus_monitor.log" 2>&1
+EOF
+        chmod +x "$MONITOR_SCRIPT_PATH"
+
+        echo "$EXPECTED_CRON_ENTRY" | sudo tee "$CRON_FILE" > /dev/null
+        echo -e "${GREEN}Global Nexus node monitoring activated via cron (runs every 5 minutes). Logs at ${LOG_DIR}/nexus_monitor.log${RESET}"
+    else
+        echo -e "${YELLOW}Global Nexus node monitoring is already active and up-to-date.${RESET}"
+    fi
+}
+
+setup_monitor_cron
 
 while true; do
     show_header
@@ -306,11 +339,10 @@ while true; do
         1)
             check_docker
             read -rp "Enter NODE_ID: " NODE_ID
-            # Basic validation for NODE_ID
             if [ -z "$NODE_ID" ]; then
                 echo -e "${RED}NODE_ID cannot be empty. Please try again.${RESET}"
                 read -p "Press Enter to continue..."
-                continue # Go back to the main menu
+                continue
             fi
             build_image
             run_container "$NODE_ID"
@@ -321,7 +353,7 @@ while true; do
         3) batch_uninstall_nodes ;;
         4) view_logs ;;
         5) uninstall_all_nodes ;;
-        6) echo "Exiting..."; exit 0 ;; # Exit the script
+        6) echo "Exiting..."; exit 0 ;;
         *) echo -e "${RED}Invalid option. Please enter a number between 1 and 6.${RESET}"; read -p "Press Enter to continue..." ;;
     esac
 done
